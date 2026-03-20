@@ -16,7 +16,7 @@ import {
 import {McpPage} from './McpPage.js';
 import type {ListenerMap, UncaughtError} from './PageCollector.js';
 import {NetworkCollector, ConsoleCollector} from './PageCollector.js';
-import type {DevTools} from './third_party/index.js';
+import type {DevTools, Protocol} from './third_party/index.js';
 import type {
   Browser,
   BrowserContext,
@@ -29,8 +29,9 @@ import type {
   Viewport,
   Target,
 } from './third_party/index.js';
-import {Locator} from './third_party/index.js';
+import {Locator, type ElementHandle} from './third_party/index.js';
 import {PredefinedNetworkConditions} from './third_party/index.js';
+import {type ToolGroup} from './tools/inPage.js';
 import {listPages} from './tools/pages.js';
 import {CLOSE_PAGE_ERROR} from './tools/ToolDefinition.js';
 import type {Context, DevToolsData} from './tools/ToolDefinition.js';
@@ -107,7 +108,7 @@ export class McpContext implements Context {
   #isRunningTrace = false;
   #screenRecorderData: {recorder: ScreenRecorder; filePath: string} | null =
     null;
-
+  #inPageTools?: ToolGroup;
   #nextPageId = 1;
   #extensionPages = new WeakMap<Target, Page>();
 
@@ -471,6 +472,14 @@ export class McpContext implements Context {
     this.#updateSelectedPageTimeouts();
   }
 
+  setInPageTools(toolGroup?: ToolGroup) {
+    this.#inPageTools = toolGroup;
+  }
+
+  getInPageTools(): ToolGroup | undefined {
+    return this.#inPageTools;
+  }
+
   #updateSelectedPageTimeouts() {
     const page = this.#getSelectedMcpPage();
     // For waiters 5sec timeout should be sufficient.
@@ -748,6 +757,7 @@ export class McpContext implements Context {
     page: McpPage,
     verbose = false,
     devtoolsData: DevToolsData | undefined = undefined,
+    extraHandles?: ElementHandle[],
   ): Promise<void> {
     const rootNode = await page.pptrPage.accessibility.snapshot({
       includeIframes: true,
@@ -801,6 +811,151 @@ export class McpContext implements Context {
     };
 
     const rootNodeWithId = assignIds(rootNode);
+
+    const createExtraNode = async (
+      handle: ElementHandle,
+    ): Promise<TextSnapshotNode | null> => {
+      const backendNodeId = await handle.backendNodeId();
+      if (!backendNodeId) {
+        return null;
+      }
+      const uniqueBackendId = `custom_${backendNodeId}`;
+      if (seenUniqueIds.has(uniqueBackendId)) {
+        return null;
+      }
+
+      let id = '';
+      if (uniqueBackendNodeIdToMcpId.has(uniqueBackendId)) {
+        id = uniqueBackendNodeIdToMcpId.get(uniqueBackendId)!;
+      } else {
+        id = `${snapshotId}_${idCounter++}`;
+        uniqueBackendNodeIdToMcpId.set(uniqueBackendId, id);
+      }
+      seenUniqueIds.add(uniqueBackendId);
+
+      const tagHandle = await handle.getProperty('localName');
+      const tagValue = await tagHandle.jsonValue();
+      const extraNode: TextSnapshotNode = {
+        role: tagValue,
+        id,
+        backendNodeId,
+        children: [],
+        elementHandle: async () => handle,
+      };
+      return extraNode;
+    };
+
+    const findAncestorNode = async (
+      handle: ElementHandle,
+    ): Promise<TextSnapshotNode | null> => {
+      let ancestorHandle = await handle.evaluateHandle(el => el.parentElement);
+
+      while (ancestorHandle) {
+        const ancestorElement = ancestorHandle.asElement();
+        if (!ancestorElement) {
+          await ancestorHandle.dispose();
+          return null;
+        }
+
+        const ancestorBackendId = await ancestorElement.backendNodeId();
+        if (ancestorBackendId) {
+          const ancestorNode = idToNode
+            .values()
+            .find(node => node.backendNodeId === ancestorBackendId);
+          if (ancestorNode) {
+            await ancestorHandle.dispose();
+            return ancestorNode;
+          }
+        }
+
+        const nextHandle = await ancestorElement.evaluateHandle(
+          el => el.parentElement,
+        );
+        await ancestorHandle.dispose();
+        ancestorHandle = nextHandle;
+      }
+      return null;
+    };
+
+    const findDescendantNodes = async (
+      backendNodeId: number,
+    ): Promise<Set<number>> => {
+      const descendantIds = new Set<number>();
+      try {
+        // @ts-expect-error internal API
+        const client = page.pptrPage._client();
+        if (client) {
+          const {node}: {node: Protocol.DOM.Node} = await client.send(
+            'DOM.describeNode',
+            {
+              backendNodeId,
+              depth: -1,
+              pierce: true,
+            },
+          );
+          const collect = (node: Protocol.DOM.Node) => {
+            if (node.backendNodeId && node.backendNodeId !== backendNodeId) {
+              descendantIds.add(node.backendNodeId);
+            }
+            if (node.children) {
+              for (const child of node.children) {
+                collect(child);
+              }
+            }
+          };
+          collect(node);
+        }
+      } catch (e) {
+        this.logger(
+          `Failed to collect descendants for backend node ${backendNodeId}`,
+          e,
+        );
+      }
+      return descendantIds;
+    };
+
+    const moveChildNodes = (
+      attachTarget: TextSnapshotNode,
+      extraNode: TextSnapshotNode,
+      descendantIds: Set<number>,
+    ): number => {
+      let firstMovedIndex = -1;
+      if (descendantIds.size > 0 && attachTarget.children) {
+        const remainingChildren: TextSnapshotNode[] = [];
+        for (const child of attachTarget.children) {
+          if (child.backendNodeId && descendantIds.has(child.backendNodeId)) {
+            if (firstMovedIndex === -1) {
+              firstMovedIndex = remainingChildren.length;
+            }
+            extraNode.children.push(child);
+          } else {
+            remainingChildren.push(child);
+          }
+        }
+        attachTarget.children = remainingChildren;
+      }
+      return firstMovedIndex !== -1
+        ? firstMovedIndex
+        : attachTarget.children
+          ? attachTarget.children.length
+          : 0;
+    };
+
+    if (extraHandles) {
+      page.extraHandles = extraHandles;
+    }
+    for (const handle of page.extraHandles ?? []) {
+      const extraNode = await createExtraNode(handle);
+      if (!extraNode) {
+        continue;
+      }
+      idToNode.set(extraNode.id, extraNode);
+      const attachTarget = (await findAncestorNode(handle)) || rootNodeWithId;
+      const descendantIds = await findDescendantNodes(extraNode.backendNodeId!);
+      const index = moveChildNodes(attachTarget, extraNode, descendantIds);
+      attachTarget.children.splice(index, 0, extraNode);
+    }
+
     const snapshot: TextSnapshot = {
       root: rootNodeWithId,
       snapshotId: String(snapshotId),

@@ -10,6 +10,8 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {describe, it} from 'node:test';
 
+import sinon from 'sinon';
+
 import type {InsightName} from '../src/trace-processing/parse.js';
 import {
   parseRawTraceBuffer,
@@ -936,7 +938,7 @@ describe('extensions', () => {
       const emptyText = getTextContent(emptyResult.content[0]);
       assert.ok(
         emptyText.includes('No extensions installed.'),
-        'Should show message for ampty extensions',
+        'Should show message for empty extensions',
       );
 
       response.resetResponseLineForTesting();
@@ -1010,6 +1012,51 @@ describe('lighthouse', () => {
       t.assert.snapshot?.(
         JSON.stringify(stabilizeStructuredContent(structuredContent), null, 2),
       );
+    });
+  });
+});
+
+describe('in-page tools', () => {
+  it('lists in-page tools', async t => {
+    await withMcpContext(async (response, context) => {
+      response.setListInPageTools();
+      const emptyResult = await response.handle('test', context);
+      const emptyText = getTextContent(emptyResult.content[0]);
+      assert.ok(
+        emptyText.includes('No in-page tools available.'),
+        'Should show message for empty in-page tools',
+      );
+
+      response.resetResponseLineForTesting();
+      const mcpPage = context.getSelectedMcpPage();
+      sinon.stub(mcpPage.pptrPage, 'evaluate').resolves({
+        name: 'My Tool Group',
+        description: 'A group of tools',
+        tools: [
+          {
+            name: 'myTool',
+            description: 'Does something',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                foo: {type: 'string'},
+              },
+            },
+          },
+        ],
+      });
+      response.setListInPageTools();
+      const {content, structuredContent} = await response.handle(
+        'test',
+        context,
+      );
+      const responseText = getTextContent(content[0]);
+      t.assert.snapshot?.(responseText);
+      assert.ok(
+        responseText.includes('inputSchema={"type":"object"'),
+        'Response should include inputSchema',
+      );
+      t.assert.snapshot?.(JSON.stringify(structuredContent, null, 2));
     });
   });
 });

@@ -34,6 +34,7 @@ export class McpPage implements ContextPage {
   // Snapshot
   textSnapshot: TextSnapshot | null = null;
   uniqueBackendNodeIdToMcpId = new Map<string, string>();
+  extraHandles?: ElementHandle[];
 
   // Emulation
   emulationSettings: EmulationSettings = {};

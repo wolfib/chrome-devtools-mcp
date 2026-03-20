@@ -3,6 +3,8 @@ exports[`pages > list_pages > list pages for extension pages with --category-ext
 1: about:blank [selected]
 ## Extension Pages
 2: chrome-extension://<extension-id>/popup.html
+## In-page tools
+No in-page tools available.
 `;
 
 exports[`pages > list_pages > list pages for extension service workers with --category-extensions 1`] = `
@@ -10,11 +12,15 @@ exports[`pages > list_pages > list pages for extension service workers with --ca
 1: about:blank [selected]
 ## Extension Service Workers
 sw-1: chrome-extension://<extension-id>/sw.js
+## In-page tools
+No in-page tools available.
 `;
 
 exports[`pages > list_pages > list pages for extension service workers without --category-extensions 1`] = `
 ## Pages
 1: about:blank [selected]
+## In-page tools
+No in-page tools available.
 `;
 
 exports[`pages > list_pages > list pages for side panels with --category-extensions 1`] = `
@@ -24,4 +30,6 @@ exports[`pages > list_pages > list pages for side panels with --category-extensi
 2: chrome-extension://<extension-id>/sidepanel.html [selected]
 ## Extension Service Workers
 sw-1: chrome-extension://<extension-id>/sw.js
+## In-page tools
+No in-page tools available.
 `;

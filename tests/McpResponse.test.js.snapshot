@@ -1198,6 +1198,67 @@ exports[`extensions > lists extensions 2`] = `
 }
 `;
 
+exports[`in-page tools > lists in-page tools 1`] = `
+## In-page tools
+My Tool Group: A group of tools
+Available tools:
+name="myTool", description="Does something", inputSchema={"type":"object","properties":{"foo":{"type":"string"}}}
+`;
+
+exports[`in-page tools > lists in-page tools 2`] = `
+{
+  "inPageTools": {
+    "name": "My Tool Group",
+    "description": "A group of tools",
+    "tools": [
+      {
+        "name": "myTool",
+        "description": "Does something",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "foo": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    ]
+  }
+}
+`;
+
+exports[`in-page tools > lists in-page tools 3`] = `
+# test response
+## In-page tools
+My Tool Group: A group of tools
+Available tools:
+name="myTool", description="Does something", inputSchema={"type":"object","properties":{"foo":{"type":"string"}}}
+`;
+
+exports[`in-page tools > lists in-page tools 4`] = `
+{
+  "inPageTools": {
+    "name": "My Tool Group",
+    "description": "A group of tools",
+    "tools": [
+      {
+        "name": "myTool",
+        "description": "Does something",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "foo": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    ]
+  }
+}
+`;
+
 exports[`lighthouse > includes lighthouse report paths 1`] = `
 ## Lighthouse Audit Results
 Mode: navigation

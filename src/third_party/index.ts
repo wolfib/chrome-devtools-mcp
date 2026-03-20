@@ -29,6 +29,7 @@ export {
   type TextContent,
 } from '@modelcontextprotocol/sdk/types.js';
 export {z as zod} from 'zod';
+export {default as ajv} from 'ajv';
 export {
   Locator,
   PredefinedNetworkConditions,
@@ -39,6 +40,7 @@ export {default as puppeteer} from 'puppeteer-core';
 export type * from 'puppeteer-core';
 export {PipeTransport} from 'puppeteer-core/internal/node/PipeTransport.js';
 export type {CdpPage} from 'puppeteer-core/internal/cdp/Page.js';
+export type {JSONSchema7, JSONSchema7Definition} from 'json-schema';
 export {
   resolveDefaultUserDataDir,
   detectBrowserPlatform,
